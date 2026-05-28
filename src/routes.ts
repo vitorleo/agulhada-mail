@@ -310,17 +310,42 @@ router.post("/u/:token", async (req, res) => {
 
 router.post("/webhooks/ses", async (req, res) => {
   if (req.query.secret !== config.SNS_WEBHOOK_SECRET) {
+    console.warn("Rejected SES webhook request with invalid secret");
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  if (req.body.Type === "SubscriptionConfirmation" && req.body.SubscribeURL) {
-    await fetch(req.body.SubscribeURL);
-    res.json({ ok: true, confirmed: true });
+  const snsEnvelope = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+  console.log("Received SES/SNS webhook", {
+    type: snsEnvelope.Type,
+    messageId: snsEnvelope.MessageId,
+    hasSubscribeUrl: Boolean(snsEnvelope.SubscribeURL)
+  });
+
+  if (snsEnvelope.Type === "SubscriptionConfirmation" && snsEnvelope.SubscribeURL) {
+    try {
+      const confirmationResponse = await fetch(snsEnvelope.SubscribeURL);
+      const confirmationBody = await confirmationResponse.text();
+      console.log("SNS subscription confirmation attempted", {
+        ok: confirmationResponse.ok,
+        status: confirmationResponse.status,
+        responsePreview: confirmationBody.slice(0, 300)
+      });
+
+      if (!confirmationResponse.ok) {
+        res.status(502).json({ ok: false, confirmed: false, status: confirmationResponse.status });
+        return;
+      }
+
+      res.json({ ok: true, confirmed: true });
+    } catch (error) {
+      console.error("SNS subscription confirmation failed", error);
+      res.status(502).json({ ok: false, confirmed: false, error: "Subscription confirmation failed" });
+    }
     return;
   }
 
-  const message = typeof req.body.Message === "string" ? JSON.parse(req.body.Message) : req.body;
+  const message = typeof snsEnvelope.Message === "string" ? JSON.parse(snsEnvelope.Message) : snsEnvelope;
   const db = await getDb();
   const eventType = message.eventType || message.notificationType;
   const mail = message.mail || {};
