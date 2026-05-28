@@ -314,6 +314,12 @@ router.post("/webhooks/ses", async (req, res) => {
     return;
   }
 
+  if (req.body.Type === "SubscriptionConfirmation" && req.body.SubscribeURL) {
+    await fetch(req.body.SubscribeURL);
+    res.json({ ok: true, confirmed: true });
+    return;
+  }
+
   const message = typeof req.body.Message === "string" ? JSON.parse(req.body.Message) : req.body;
   const db = await getDb();
   const eventType = message.eventType || message.notificationType;
