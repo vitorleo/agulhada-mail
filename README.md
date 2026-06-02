@@ -46,4 +46,4 @@ The API server starts on `http://localhost:3025` by default.
 - [API routes](docs/api-routes.md)
 - [Amazon SES setup](docs/ses-setup.md)
 - [Implementation notes](docs/implementation-notes.md)
-
+- [React Email templates](docs/react-email-templates.md)

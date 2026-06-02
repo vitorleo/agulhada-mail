@@ -39,7 +39,8 @@ export type EmailJob = {
   kind: EmailCategory;
   status: JobStatus;
   campaignId?: ObjectId;
-  templateId: ObjectId;
+  templateId?: ObjectId;
+  templateSlug?: string;
   subscriberId?: ObjectId;
   to: string;
   toName?: string;

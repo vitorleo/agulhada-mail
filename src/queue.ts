@@ -2,7 +2,9 @@ import { ObjectId } from "mongodb";
 import { getDb } from "./db.js";
 import { config } from "./config.js";
 import { verifyUnsubscribeToken } from "./crypto.js";
-import { renderTemplate } from "./templates.js";
+import { renderHandlebarsTemplate } from "./templates.js";
+import { renderReactEmailTemplate } from "./emailTemplates/render.js";
+import { ReactEmailTemplateError } from "./emailTemplates/registry.js";
 import { sendWithSes } from "./mailer.js";
 import type { EmailJob, EmailTemplate } from "./types.js";
 
@@ -58,20 +60,14 @@ export async function processJob(job: EmailJob): Promise<void> {
     return;
   }
 
-  const template = await db.collection<EmailTemplate>("email_templates").findOne({ _id: job.templateId });
-  if (!template) {
-    await failJob(job, "Template not found", false);
-    return;
-  }
-
   const unsubscribeUrl = job.unsubscribeToken
     ? `${config.PUBLIC_BASE_URL}/u/${encodeURIComponent(job.unsubscribeToken)}`
     : undefined;
 
   const data = { ...job.data, unsubscribeUrl };
-  const rendered = renderTemplate(template, data);
 
   try {
+    const rendered = await renderJobTemplate(job, data);
     const sesMessageId = await sendWithSes({
       to: job.to,
       toName: job.toName,
@@ -102,6 +98,32 @@ export async function processJob(job: EmailJob): Promise<void> {
   } catch (error) {
     await failJob(job, error instanceof Error ? error.message : String(error), true);
   }
+}
+
+async function renderJobTemplate(job: EmailJob, data: Record<string, unknown>) {
+  if (job.templateSlug) {
+    try {
+      return await renderReactEmailTemplate(job.templateSlug, data, {
+        expectedCategory: job.kind,
+        requireUnsubscribeUrl: job.kind === "campaign"
+      });
+    } catch (error) {
+      if (!(error instanceof ReactEmailTemplateError)) throw error;
+      if (!job.templateId) throw error;
+    }
+  }
+
+  if (!job.templateId) {
+    throw new Error("Template not found");
+  }
+
+  const db = await getDb();
+  const template = await db.collection<EmailTemplate>("email_templates").findOne({ _id: job.templateId });
+  if (!template) {
+    throw new Error("Template not found");
+  }
+
+  return renderHandlebarsTemplate(template, data);
 }
 
 async function failJob(job: EmailJob, error: string, retryable: boolean): Promise<void> {

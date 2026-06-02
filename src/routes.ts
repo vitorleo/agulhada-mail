@@ -5,6 +5,8 @@ import { config } from "./config.js";
 import { getDb } from "./db.js";
 import { signUnsubscribeToken, verifyUnsubscribeToken } from "./crypto.js";
 import { renderTemplate } from "./templates.js";
+import { renderReactEmailTemplate } from "./emailTemplates/render.js";
+import { getReactEmailTemplate, ReactEmailTemplateError } from "./emailTemplates/registry.js";
 import { sendWithSes } from "./mailer.js";
 import type { EmailTemplate } from "./types.js";
 
@@ -119,7 +121,8 @@ router.post("/api/campaigns", requireAdmin, async (req, res) => {
   const db = await getDb();
   const list = await db.collection("lists").findOne({ slug: input.listSlug });
   const template = await db.collection("email_templates").findOne({ slug: input.templateSlug, category: "campaign" });
-  if (!list || !template) {
+  const reactTemplate = findReactTemplate(input.templateSlug, "campaign");
+  if (!list || (!template && !reactTemplate)) {
     res.status(400).json({ error: "List or campaign template not found" });
     return;
   }
@@ -128,7 +131,8 @@ router.post("/api/campaigns", requireAdmin, async (req, res) => {
   const result = await db.collection("campaigns").insertOne({
     name: input.name,
     listId: list._id,
-    templateId: template._id,
+    templateId: template?._id,
+    templateSlug: input.templateSlug,
     subjectOverride: input.subjectOverride,
     status: "draft",
     stats: {},
@@ -178,6 +182,7 @@ router.post("/api/campaigns/:campaignId/enqueue", requireAdmin, async (req, res)
           status: "pending",
           campaignId: campaign._id,
           templateId: campaign.templateId,
+          templateSlug: campaign.templateSlug,
           subscriberId: subscriber._id,
           to: subscriber.email,
           toName: subscriber.name || subscriber.firstName,
@@ -185,7 +190,10 @@ router.post("/api/campaigns/:campaignId/enqueue", requireAdmin, async (req, res)
           data: {
             firstName: subscriber.firstName || subscriber.name || "",
             name: subscriber.name || "",
-            email: subscriber.email
+            email: subscriber.email,
+            source: subscriber.source || "",
+            campaignId: campaign._id.toString(),
+            campaignName: campaign.name || ""
           },
           category: "marketing",
           unsubscribeToken,
@@ -226,16 +234,21 @@ router.post("/api/transactional/send", requireAdmin, async (req, res) => {
     return;
   }
 
-  const template = await db.collection<EmailTemplate>("email_templates").findOne({
+  const reactTemplate = findReactTemplate(input.templateSlug, "transactional");
+  const template = reactTemplate ? null : await db.collection<EmailTemplate>("email_templates").findOne({
     slug: input.templateSlug,
     category: "transactional"
   });
-  if (!template) {
+  if (!reactTemplate && !template) {
     res.status(404).json({ error: "Transactional template not found" });
     return;
   }
 
-  const rendered = renderTemplate(template, input.data);
+  const rendered = reactTemplate
+    ? await renderReactEmailTemplate(input.templateSlug, { ...input.data, email: input.to, name: input.toName }, {
+        expectedCategory: "transactional"
+      })
+    : renderTemplate(template!, input.data);
   const messageId = await sendWithSes({
     to: input.to,
     toName: input.toName,
@@ -247,6 +260,16 @@ router.post("/api/transactional/send", requireAdmin, async (req, res) => {
 
   res.status(202).json({ ok: true, messageId });
 });
+
+function findReactTemplate(slug: string, category: "campaign" | "transactional") {
+  try {
+    const template = getReactEmailTemplate(slug);
+    return template.category === category ? template : null;
+  } catch (error) {
+    if (error instanceof ReactEmailTemplateError) return null;
+    throw error;
+  }
+}
 
 router.get("/u/:token", async (req, res) => {
   const payload = verifyUnsubscribeToken(req.params.token);

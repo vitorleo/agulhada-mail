@@ -1,9 +1,11 @@
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
 import { config } from "../src/config.js";
+import { renderReactEmailTemplate } from "../src/emailTemplates/render.js";
 
 type Options = {
   to?: string;
   subject: string;
+  template?: string;
 };
 
 async function main() {
@@ -13,6 +15,32 @@ async function main() {
   }
 
   const ses = new SESv2Client({ region: config.AWS_REGION });
+  const content = options.template
+    ? await renderReactEmailTemplate(options.template, {
+        firstName: "Vitor",
+        name: "Vitor",
+        email: options.to,
+        unsubscribeUrl: `${config.PUBLIC_BASE_URL}/u/manual-test-token`
+      })
+    : {
+        subject: options.subject,
+        html: `
+              <p>Testing Agulhada Mail through Amazon SES.</p>
+              <ul>
+                <li><strong>From:</strong> ${escapeHtml(config.SES_FROM_EMAIL)}</li>
+                <li><strong>Configuration set:</strong> ${escapeHtml(config.SES_CONFIGURATION_SET)}</li>
+                <li><strong>Sent at:</strong> ${escapeHtml(new Date().toISOString())}</li>
+              </ul>
+            `,
+        text: [
+          "Testing Agulhada Mail through Amazon SES.",
+          "",
+          `From: ${config.SES_FROM_EMAIL}`,
+          `Configuration set: ${config.SES_CONFIGURATION_SET}`,
+          `Sent at: ${new Date().toISOString()}`
+        ].join("\n")
+      };
+
   const response = await ses.send(new SendEmailCommand({
     FromEmailAddress: config.SES_FROM_EMAIL,
     Destination: { ToAddresses: [options.to] },
@@ -23,27 +51,14 @@ async function main() {
     ],
     Content: {
       Simple: {
-        Subject: { Data: options.subject, Charset: "UTF-8" },
+        Subject: { Data: content.subject, Charset: "UTF-8" },
         Body: {
           Text: {
-            Data: [
-              "Testing Agulhada Mail through Amazon SES.",
-              "",
-              `From: ${config.SES_FROM_EMAIL}`,
-              `Configuration set: ${config.SES_CONFIGURATION_SET}`,
-              `Sent at: ${new Date().toISOString()}`
-            ].join("\n"),
+            Data: content.text,
             Charset: "UTF-8"
           },
           Html: {
-            Data: `
-              <p>Testing Agulhada Mail through Amazon SES.</p>
-              <ul>
-                <li><strong>From:</strong> ${escapeHtml(config.SES_FROM_EMAIL)}</li>
-                <li><strong>Configuration set:</strong> ${escapeHtml(config.SES_CONFIGURATION_SET)}</li>
-                <li><strong>Sent at:</strong> ${escapeHtml(new Date().toISOString())}</li>
-              </ul>
-            `,
+            Data: content.html,
             Charset: "UTF-8"
           }
         }
@@ -55,6 +70,7 @@ async function main() {
     to: options.to,
     from: config.SES_FROM_EMAIL,
     configurationSet: config.SES_CONFIGURATION_SET,
+    template: options.template ?? null,
     messageId: response.MessageId
   });
 }
@@ -76,7 +92,8 @@ function parseArgs(args: string[]): Options {
 
   return {
     to: stringValue(values, "to"),
-    subject: stringValue(values, "subject") || "Agulhada Mail SES production test"
+    subject: stringValue(values, "subject") || "Agulhada Mail SES production test",
+    template: stringValue(values, "template")
   };
 }
 
