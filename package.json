@@ -10,7 +10,9 @@
     "start:worker": "node dist/worker.js",
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit",
-    "create-indexes": "tsx scripts/create-indexes.ts"
+    "create-indexes": "tsx scripts/create-indexes.ts",
+    "cleanup:mailjet": "tsx scripts/cleanup-mailjet-import.ts",
+    "import:mailjet": "tsx scripts/import-mailjet.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.600.0",
