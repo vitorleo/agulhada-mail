@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.600.0",
-    "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.8",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -25,6 +24,7 @@
     "mongodb": "^6.9.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-email": "^6.5.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
