@@ -11,6 +11,13 @@ export const reactEmailTemplates = {
     subject: "Bem-vindo ao Agulhada.com",
     component: Welcome
   },
+    welcome30dias: {
+    slug: "welcome",
+    name: "Welcome",
+    category: "transactional",
+    subject: "Seus primeiros passos no Agulhada.com",
+    component: Welcome
+  },
   "promo-30-days": {
     slug: "promo-30-days",
     name: "Promo 30 Days",

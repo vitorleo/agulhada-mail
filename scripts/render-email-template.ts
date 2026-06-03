@@ -33,7 +33,7 @@ async function main() {
 }
 
 function sampleData(slug: string) {
-  return {
+  const baseData = {
     firstName: "Vitor",
     name: "Vitor",
     email: "vitorleo@gmail.com",
@@ -42,6 +42,17 @@ function sampleData(slug: string) {
     campaignName: slug,
     unsubscribeUrl: "https://email.agulhada.com/u/manual-test-token"
   };
+
+  if (slug === "welcome") {
+    return {
+      ...baseData,
+      userId: "manual-didineedles-test",
+      promoCode: "VIP30",
+      promoLevel: "VIP30"
+    };
+  }
+
+  return baseData;
 }
 
 function parseArgs(args: string[]) {

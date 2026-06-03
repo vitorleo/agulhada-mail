@@ -7,6 +7,9 @@ import type { ReactEmailTemplateProps } from "../types.js";
 
 export default function Welcome({ data }: ReactEmailTemplateProps) {
   const name = stringValue(data.firstName) || stringValue(data.name);
+  const promoLevel = stringValue(data.promoLevel);
+  const promoCode = stringValue(data.promoCode);
+  const hasPromoContext = Boolean(promoLevel || promoCode);
 
   return (
     <EmailLayout
@@ -20,7 +23,13 @@ export default function Welcome({ data }: ReactEmailTemplateProps) {
         Parabéns! Você se juntou a usuários no Brasil e no mundo que usam o Agulhada.com para receber alertas e
         encontrar oportunidades de trade.
       </Text>
-      <Text style={styles.text}>Veja como aproveitar melhor a plataforma:</Text>
+      {hasPromoContext ? (
+        <Text style={styles.text}>
+          Seu acesso promocional {promoLevel ? `ao plano ${promoLevel}` : "ao Agulhada.com"} já está ativo. Estes são
+          os primeiros passos para aproveitar melhor os próximos dias.
+        </Text>
+      ) : null}
+      <Text style={styles.text}>Veja como usar a ferramenta:</Text>
       <ul style={styles.list}>
         <li style={styles.listItem}>
           <strong>Aprenda a usar o Agulhada.com:</strong>{" "}

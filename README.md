@@ -48,3 +48,4 @@ The API server starts on `http://localhost:3025` by default.
 - [Implementation notes](docs/implementation-notes.md)
 - [React Email templates](docs/react-email-templates.md)
 - [Stripe webhook welcome email](docs/stripe-webhook-welcome-email.md)
+- [Didineedles accept-promo welcome email](docs/didineedles-accept-promo-welcome.md)
