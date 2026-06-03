@@ -32,7 +32,7 @@ Payload:
 }
 ```
 
-The registered `welcome` template uses the subject `Seus primeiros passos no Agulhada.com`. `promoCode` and `promoLevel` are optional for general welcomes, but the didineedles accept-promo request should include them when available.
+The registered `welcome30dias` template uses the subject `Seus primeiros passos no Agulhada.com`. `promoCode` and `promoLevel` are optional for general welcomes, but the didineedles accept-promo request should include them when available so Agulhada Mail can render the promo-specific first-steps copy.
 
 Successful response:
 
@@ -69,7 +69,7 @@ PowerShell example:
 
 ```powershell
 $body = @{
-  templateSlug = "welcome"
+  templateSlug = "welcome30dias"
   to = "vitorleo@gmail.com"
   toName = "Vitor"
   data = @{
@@ -104,7 +104,7 @@ Scope:
 Goal:
 - Replace only the existing Mailjet/Nodemailer welcome email send that happens after a successful promo grant.
 - After the promo grant succeeds, call POST {AGULHADA_MAIL_API_URL}/api/transactional/send with Authorization: Bearer {AGULHADA_MAIL_API_TOKEN}.
-- Use templateSlug "welcome".
+- Use templateSlug "welcome30dias".
 - Send to the authenticated user's email.
 - Include toName/name/firstName when available.
 - Include data.email, data.name, data.firstName, data.userId, data.promoCode, and data.promoLevel when available.

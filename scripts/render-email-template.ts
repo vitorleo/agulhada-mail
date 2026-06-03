@@ -43,7 +43,7 @@ function sampleData(slug: string) {
     unsubscribeUrl: "https://email.agulhada.com/u/manual-test-token"
   };
 
-  if (slug === "welcome") {
+  if (slug === "welcome30dias") {
     return {
       ...baseData,
       userId: "manual-didineedles-test",
