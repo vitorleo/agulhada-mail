@@ -18,7 +18,7 @@ Payload:
 
 ```json
 {
-  "templateSlug": "welcome",
+  "templateSlug": "welcome30dias",
   "to": "customer@example.com",
   "toName": "Customer Name",
   "data": {
