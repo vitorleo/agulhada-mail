@@ -12,12 +12,12 @@ export default function Welcome({ data }: ReactEmailTemplateProps) {
     <EmailLayout
       preview="Boas-vindas do Agulhada.com"
       recipientEmail={stringValue(data.email)}
-      footerReason="Voce recebeu este email porque e usuario registrado no Agulhada.com."
+      footerReason="Você recebeu este e-mail porque é usuário registrado no Agulhada.com."
     >
       <Heading style={styles.heading}>Bem-vindo ao Agulhada.com</Heading>
-      <Text style={styles.text}>{name ? `Ola ${name},` : "Ola,"}</Text>
+      <Text style={styles.text}>{name ? `Olá ${name},` : "Olá,"}</Text>
       <Text style={styles.text}>
-        Parabens! Voce se juntou a usuarios no Brasil e no mundo que usam o Agulhada.com para receber alertas e
+        Parabéns! Você se juntou a usuários no Brasil e no mundo que usam o Agulhada.com para receber alertas e
         encontrar oportunidades de trade.
       </Text>
       <Text style={styles.text}>Veja como aproveitar melhor a plataforma:</Text>
@@ -27,15 +27,15 @@ export default function Welcome({ data }: ReactEmailTemplateProps) {
           <Link href={emailAssets.youtubeUrl}>assine nosso canal no YouTube</Link> e assista aos tutoriais.
         </li>
         <li style={styles.listItem}>
-          <strong>Acione o robo de alertas no Telegram:</strong> procure por{" "}
+          <strong>Acione o robô de alertas no Telegram:</strong> procure por{" "}
           <Link href={emailAssets.telegramBotUrl}>@Agulhadacom_bot</Link> no Telegram.
         </li>
         <li style={styles.listItem}>
-          <strong>Encontre outros usuarios:</strong> troque ideias no{" "}
-          <Link href={emailAssets.telegramGroupUrl}>grupo de usuarios</Link> do Agulhada.com.
+          <strong>Encontre outros usuários:</strong> troque ideias no{" "}
+          <Link href={emailAssets.telegramGroupUrl}>grupo de usuários</Link> do Agulhada.com.
         </li>
         <li style={styles.listItem}>
-          <strong>Entre em contato:</strong> em caso de duvidas, sugestoes ou problemas, envie um email para{" "}
+          <strong>Entre em contato:</strong> em caso de dúvidas, sugestões ou problemas, envie um e-mail para{" "}
           <Link href={`mailto:${emailAssets.supportEmail}`}>{emailAssets.supportEmail}</Link>.
         </li>
       </ul>
