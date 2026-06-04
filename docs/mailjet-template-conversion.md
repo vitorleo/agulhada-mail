@@ -26,6 +26,7 @@ The export folder is generated local source material. Re-run the script if Mailj
 | `6739428` | Marketing 30 days Sem CST | `marketing-30-days` | campaign | Experimente o Agulhada.com por 30 dias grátis |
 | `6430901` | Vencendo | `trial-expiring` | campaign | Receba alerta depois dos 30 dias |
 | `7929021` | Vencendo 50% | `trial-expiring-50-cst24` | campaign | Receba alerta depois dos 30 dias |
+| `6414270` | 30 dias repescagem | `trial-recapture` | campaign | Últimos dias para seus 30 dias grátis |
 | `6419616` | novo_assinante | `welcome` | transactional | Bem-vindo ao Agulhada.com |
 | `8051890` | Marketing 30 days CST25 | `marketing-30-days-cst25` | campaign | 🔥 Teste o Agulhada.com GRÁTIS por 30 dias e leve seu trade apra o próximo nivel! |
 

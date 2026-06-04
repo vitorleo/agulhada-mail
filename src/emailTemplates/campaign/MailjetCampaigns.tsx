@@ -12,6 +12,7 @@ type CampaignConfig = {
   footerReason: string;
   ctaLabel: string;
   ctaUrl: "promo" | "subscription";
+  includeGreeting?: boolean;
   paragraphs: Array<React.ReactNode>;
   listHeading?: string;
   listItems?: React.ReactNode[];
@@ -88,6 +89,31 @@ const configs = {
       <>Envie suas perguntas, sugestões ou problemas para <Link href={`mailto:${emailAssets.supportEmail}`}>{emailAssets.supportEmail}</Link>.</>
     ]
   },
+  trialRecapture: {
+    preview: "Não vai perder essa, vai?",
+    heading: "Estamos te esperando!",
+    subject: "Últimos dias para seus 30 dias grátis",
+    footerReason: "Você recebeu este email pois é aluno do CST.",
+    ctaLabel: "Quero meus 30 dias grátis",
+    ctaUrl: "promo",
+    includeGreeting: false,
+    paragraphs: [
+      <>
+        Seus colegas da sua turma <strong>CST</strong> do Didi Aguiar já estão usando todos os recursos do
+        Agulhada.com e recebendo <strong>alertas de agulhadas no Telegram</strong> sem pagar.
+      </>,
+      "Eles estão participando de uma promoção exclusiva para os alunos do CST: uma parceria entre o Didi e o Agulhada.com.",
+      <>
+        <strong>Você também está convidado para experimentar o Agulhada.com por 30 dias grátis.</strong>
+      </>,
+      <>
+        Aceitando este convite, você terá acesso a todos os serviços pagos do{" "}
+        <Link href={emailAssets.subscriptionUrl}>Plano VIP</Link> do Agulhada.com, sem precisar informar o seu cartão
+        de crédito. Corre lá, porque a promoção está em seus últimos dias.
+      </>,
+      "Não deixe de aproveitar a promoção clicando no botão."
+    ]
+  },
   marketing30DaysCst25: {
     preview: "Não perca as agulhadas certeiras do Didi no seu Telegram!",
     heading: "30 dias GRÁTIS para testar o Agulhada.com",
@@ -136,6 +162,10 @@ export function TrialExpiring50Cst24(props: ReactEmailTemplateProps) {
   return <MailjetCampaign config={configs.trialExpiring50Cst24} {...props} />;
 }
 
+export function TrialRecapture(props: ReactEmailTemplateProps) {
+  return <MailjetCampaign config={configs.trialRecapture} {...props} />;
+}
+
 export function Marketing30DaysCst25(props: ReactEmailTemplateProps) {
   return <MailjetCampaign config={configs.marketing30DaysCst25} {...props} />;
 }
@@ -153,7 +183,7 @@ function MailjetCampaign({ data, config }: ReactEmailTemplateProps & { config: C
       footerReason={config.footerReason}
     >
       <Heading style={styles.heading}>{config.heading}</Heading>
-      <Text style={styles.text}>Olá {firstName},</Text>
+      {config.includeGreeting === false ? null : <Text style={styles.text}>Olá {firstName},</Text>}
       {config.paragraphs.map((paragraph, index) => (
         <Text key={index} style={styles.text}>{paragraph}</Text>
       ))}
@@ -188,6 +218,7 @@ export const mailjetCampaignSubjects = {
   marketing30Days: configs.marketing30Days.subject,
   trialExpiring: configs.trialExpiring.subject,
   trialExpiring50Cst24: configs.trialExpiring50Cst24.subject,
+  trialRecapture: configs.trialRecapture.subject,
   marketing30DaysCst25: configs.marketing30DaysCst25.subject
 } as const;
 

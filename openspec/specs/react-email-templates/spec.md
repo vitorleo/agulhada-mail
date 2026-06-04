@@ -89,7 +89,7 @@ The system SHALL provide React Email templates for each Mailjet template in the 
 
 #### Scenario: Selected Mailjet templates are registered
 - **WHEN** the React Email template registry is inspected
-- **THEN** it includes registered templates corresponding to Mailjet IDs `6487676`, `6739428`, `6430901`, `7929021`, `6419616`, and `8051890`
+- **THEN** it includes registered templates corresponding to Mailjet IDs `6487676`, `6739428`, `6430901`, `7929021`, `6414270`, `6419616`, and `8051890`
 
 #### Scenario: Converted Mailjet template renders locally
 - **WHEN** a converted Mailjet-derived template is rendered with valid template data

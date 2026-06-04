@@ -30,6 +30,7 @@ Current slugs:
 - `marketing-30-days`: Mailjet-derived general 30-day marketing campaign.
 - `trial-expiring`: Mailjet-derived trial-expiring campaign.
 - `trial-expiring-50-cst24`: Mailjet-derived trial-expiring campaign with CST24 discount.
+- `trial-recapture`: Mailjet-derived 30-day recapture campaign.
 - `marketing-30-days-cst25`: Mailjet-derived CST25 30-day marketing campaign.
 
 Each registry entry declares:

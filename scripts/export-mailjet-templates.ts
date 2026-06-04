@@ -37,6 +37,7 @@ const defaultTargets: MailjetTemplateTarget[] = [
   { id: 6739428, slug: "marketing-30-days", label: "Marketing 30 dias" },
   { id: 6430901, slug: "trial-expiring", label: "30 dias expirando" },
   { id: 7929021, slug: "trial-expiring-50-cst24", label: "30 dias expirando 50% CST24" },
+  { id: 6414270, slug: "trial-recapture", label: "30 dias repescagem" },
   { id: 6419616, slug: "welcome", label: "Welcome" },
   { id: 8051890, slug: "marketing-30-days-cst25", label: "Marketing 30 dias CST25" }
 ];
@@ -44,12 +45,17 @@ const defaultTargets: MailjetTemplateTarget[] = [
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const outDir = resolve(options.outDir ?? "tmp/mailjet-template-export");
+  const targets = options.ids?.size ? defaultTargets.filter((target) => options.ids?.has(target.id)) : defaultTargets;
   const auth = getAuthHeader();
   const summaries: ExportedTemplateSummary[] = [];
 
   await mkdir(outDir, { recursive: true });
 
-  for (const target of defaultTargets) {
+  if (!targets.length) {
+    throw new Error(`No matching Mailjet template targets for ids: ${Array.from(options.ids ?? []).join(", ")}`);
+  }
+
+  for (const target of targets) {
     const templateDir = resolve(outDir, `${target.id}-${target.slug}`);
     await mkdir(templateDir, { recursive: true });
 
@@ -207,12 +213,24 @@ function parseArgs(args: string[]) {
       index++;
     }
   }
-  return { outDir: optionalString(values, "out-dir") };
+  return {
+    outDir: optionalString(values, "out-dir"),
+    ids: idSetValue(values, "id") ?? idSetValue(values, "ids")
+  };
 }
 
 function optionalString(values: Map<string, string | true>, key: string): string | undefined {
   const value = values.get(key);
   return typeof value === "string" ? value : undefined;
+}
+
+function idSetValue(values: Map<string, string | true>, key: string): Set<number> | undefined {
+  const value = optionalString(values, key);
+  if (!value) return undefined;
+  const ids = value.split(",")
+    .map((part) => Number(part.trim()))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  return ids.length ? new Set(ids) : undefined;
 }
 
 function relativeName(path: string): string {
@@ -230,13 +248,12 @@ async function writeMarkdownSummary(path: string, summaries: ExportedTemplateSum
     "| Mailjet ID | Slug | Mailjet name | Subject | Missing fields |",
     "| --- | --- | --- | --- | --- |",
     ...summaries.map((summary) => [
-      `| \`${summary.id}\``,
+      `\`${summary.id}\``,
       `\`${summary.slug}\``,
       summary.mailjetName ?? "",
       summary.subject ?? "",
-      summary.missingFields.length ? summary.missingFields.join(", ") : "None",
-      "|"
-    ].join(" | ")),
+      summary.missingFields.length ? summary.missingFields.join(", ") : "None"
+    ].join(" | ")).map((row) => `| ${row} |`),
     "",
     "## Variables",
     "",

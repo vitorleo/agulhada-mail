@@ -5,7 +5,8 @@ import {
   Marketing30DaysCst,
   Marketing30DaysCst25,
   TrialExpiring,
-  TrialExpiring50Cst24
+  TrialExpiring50Cst24,
+  TrialRecapture
 } from "./campaign/MailjetCampaigns.js";
 import Welcome from "./transactional/Welcome.js";
 import type { EmailCategory } from "../types.js";
@@ -60,6 +61,13 @@ export const reactEmailTemplates = {
     category: "campaign",
     subject: mailjetCampaignSubjects.trialExpiring50Cst24,
     component: TrialExpiring50Cst24
+  },
+  "trial-recapture": {
+    slug: "trial-recapture",
+    name: "30 dias repescagem",
+    category: "campaign",
+    subject: mailjetCampaignSubjects.trialRecapture,
+    component: TrialRecapture
   },
   "marketing-30-days-cst25": {
     slug: "marketing-30-days-cst25",
