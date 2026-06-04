@@ -24,7 +24,13 @@ Templates are registered in `src/emailTemplates/registry.ts`.
 Current slugs:
 
 - `welcome`: transactional welcome email.
+- `welcome30dias`: transactional first-steps welcome email alias.
 - `promo-30-days`: marketing campaign email.
+- `marketing-30-days-cst`: Mailjet-derived CST 30-day marketing campaign.
+- `marketing-30-days`: Mailjet-derived general 30-day marketing campaign.
+- `trial-expiring`: Mailjet-derived trial-expiring campaign.
+- `trial-expiring-50-cst24`: Mailjet-derived trial-expiring campaign with CST24 discount.
+- `marketing-30-days-cst25`: Mailjet-derived CST25 30-day marketing campaign.
 
 Each registry entry declares:
 

@@ -4,6 +4,8 @@ import { renderReactEmailTemplate } from "../src/emailTemplates/render.js";
 
 type Options = {
   to?: string;
+  bcc?: string[];
+  from?: string;
   subject: string;
   template?: string;
 };
@@ -42,8 +44,11 @@ async function main() {
       };
 
   const response = await ses.send(new SendEmailCommand({
-    FromEmailAddress: config.SES_FROM_EMAIL,
-    Destination: { ToAddresses: [options.to] },
+    FromEmailAddress: options.from ?? config.SES_FROM_EMAIL,
+    Destination: {
+      ToAddresses: [options.to],
+      ...(options.bcc?.length ? { BccAddresses: options.bcc } : {})
+    },
     ConfigurationSetName: config.SES_CONFIGURATION_SET,
     EmailTags: [
       { Name: "category", Value: "manual-test" },
@@ -68,7 +73,8 @@ async function main() {
 
   console.log("TEST_EMAIL_SENT", {
     to: options.to,
-    from: config.SES_FROM_EMAIL,
+    from: options.from ?? config.SES_FROM_EMAIL,
+    bcc: options.bcc ?? [],
     configurationSet: config.SES_CONFIGURATION_SET,
     template: options.template ?? null,
     messageId: response.MessageId
@@ -92,6 +98,8 @@ function parseArgs(args: string[]): Options {
 
   return {
     to: stringValue(values, "to"),
+    bcc: listValue(values, "bcc"),
+    from: stringValue(values, "from"),
     subject: stringValue(values, "subject") || "Agulhada Mail SES production test",
     template: stringValue(values, "template")
   };
@@ -100,6 +108,12 @@ function parseArgs(args: string[]): Options {
 function stringValue(values: Map<string, string | true>, key: string): string | undefined {
   const value = values.get(key);
   return typeof value === "string" ? value : undefined;
+}
+
+function listValue(values: Map<string, string | true>, key: string): string[] | undefined {
+  const value = stringValue(values, key);
+  if (!value) return undefined;
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function escapeHtml(value: string): string {

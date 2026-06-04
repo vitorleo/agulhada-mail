@@ -12,6 +12,7 @@
     "check": "tsc --noEmit",
     "create-indexes": "tsx scripts/create-indexes.ts",
     "cleanup:mailjet": "tsx scripts/cleanup-mailjet-import.ts",
+    "export:mailjet-templates": "tsx scripts/export-mailjet-templates.ts",
     "import:mailjet": "tsx scripts/import-mailjet.ts",
     "render:emails": "tsx scripts/render-email-template.ts"
   },
