@@ -8,18 +8,25 @@ import { renderTemplate } from "./templates.js";
 import { renderReactEmailTemplate } from "./emailTemplates/render.js";
 import { getReactEmailTemplate, ReactEmailTemplateError } from "./emailTemplates/registry.js";
 import { sendWithSes } from "./mailer.js";
-import type { EmailTemplate } from "./types.js";
+import type { EmailTemplate, Subscriber } from "./types.js";
 
 export const router = express.Router();
 
 const bccRecipientSchema = z.string().trim().min(1).refine(isValidEmailRecipient, {
   message: "Invalid email address"
 });
+const manualSendSchema = z.object({
+  templateSlug: z.string().trim().min(1),
+  to: z.string().trim().email(),
+  toName: z.string().trim().min(1).optional(),
+  subjectOverride: z.string().trim().min(1).max(300).optional(),
+  data: z.record(z.unknown()).default({})
+});
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (token !== config.API_ADMIN_TOKEN) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ ok: false, error: { code: "unauthorized", message: "Unauthorized" } });
     return;
   }
   next();
@@ -267,6 +274,165 @@ router.post("/api/transactional/send", requireAdmin, async (req, res) => {
 
   res.status(202).json({ ok: true, messageId });
 });
+
+router.post("/api/manual/send", requireAdmin, async (req, res) => {
+  const parsed = manualSendSchema.safeParse(req.body);
+  if (!parsed.success) {
+    sendManualError(res, 400, "validation_error", "Invalid manual send request", {
+      issues: parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message
+      }))
+    });
+    return;
+  }
+
+  const input = parsed.data;
+  let reactTemplate;
+  try {
+    reactTemplate = getReactEmailTemplate(input.templateSlug);
+  } catch (error) {
+    if (error instanceof ReactEmailTemplateError) {
+      sendManualError(res, 404, "template_not_found", "React Email template not found", {
+        templateSlug: input.templateSlug
+      });
+      return;
+    }
+    throw error;
+  }
+
+  const db = await getDb();
+  const emailLower = input.to.toLowerCase();
+  const suppressionScopes = reactTemplate.category === "campaign" ? ["global", "marketing"] : ["global"];
+  const suppressed = await db.collection("suppressions").findOne({
+    emailLower,
+    scope: { $in: suppressionScopes }
+  });
+  if (suppressed) {
+    sendManualError(res, 409, "suppressed", "Recipient is suppressed", {
+      reason: suppressed.reason,
+      scope: suppressed.scope
+    });
+    return;
+  }
+
+  let unsubscribeUrl: string | undefined;
+  try {
+    unsubscribeUrl = reactTemplate.category === "campaign"
+      ? await createManualUnsubscribeUrl(input.to, input.toName, input.data)
+      : undefined;
+  } catch (error) {
+    sendManualError(res, 500, "unsubscribe_error", error instanceof Error ? error.message : "Could not create unsubscribe URL", {
+      templateSlug: input.templateSlug
+    });
+    return;
+  }
+
+  const renderData = {
+    ...input.data,
+    email: input.to,
+    ...(input.toName && !input.data.name ? { name: input.toName } : {}),
+    ...(input.toName && !input.data.firstName ? { firstName: input.toName } : {}),
+    ...(unsubscribeUrl ? { unsubscribeUrl } : {})
+  };
+
+  let rendered;
+  try {
+    rendered = await renderReactEmailTemplate(input.templateSlug, renderData, {
+      expectedCategory: reactTemplate.category,
+      requireUnsubscribeUrl: reactTemplate.category === "campaign"
+    });
+  } catch (error) {
+    sendManualError(res, 422, "render_error", error instanceof Error ? error.message : "Could not render template", {
+      templateSlug: input.templateSlug
+    });
+    return;
+  }
+
+  try {
+    const messageId = await sendWithSes({
+      to: input.to,
+      toName: input.toName,
+      subject: input.subjectOverride || rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      unsubscribeUrl,
+      tags: {
+        category: reactTemplate.category === "campaign" ? "marketing" : "transactional",
+        source: "manual-send",
+        templateSlug: input.templateSlug
+      }
+    });
+
+    res.status(202).json({ ok: true, messageId });
+  } catch (error) {
+    sendManualError(res, 502, "send_error", error instanceof Error ? error.message : "Could not send email", {
+      templateSlug: input.templateSlug
+    });
+  }
+});
+
+async function createManualUnsubscribeUrl(to: string, toName: string | undefined, data: Record<string, unknown>): Promise<string> {
+  const db = await getDb();
+  const now = new Date();
+  const emailLower = to.toLowerCase();
+  const dataFirstName = typeof data.firstName === "string" ? data.firstName : undefined;
+  const dataName = typeof data.name === "string" ? data.name : undefined;
+  const dataUserId = typeof data.userId === "string" ? data.userId : undefined;
+  const subscriberUpdate = {
+    email: to,
+    emailLower,
+    ...(dataFirstName || toName ? { firstName: dataFirstName || toName } : {}),
+    ...(dataName || toName ? { name: dataName || toName } : {}),
+    ...(dataUserId ? { userId: dataUserId } : {}),
+    updatedAt: now
+  };
+
+  let subscriber = await db.collection<Subscriber>("subscribers").findOne({ emailLower });
+  if (subscriber) {
+    await db.collection<Subscriber>("subscribers").updateOne(
+      { _id: subscriber._id },
+      { $set: subscriberUpdate }
+    );
+  } else {
+    const result = await db.collection<Subscriber>("subscribers").insertOne({
+      ...subscriberUpdate,
+      source: "manual-send",
+      status: "subscribed",
+      subscribedAt: now,
+      createdAt: now
+    } as Subscriber);
+    subscriber = await db.collection<Subscriber>("subscribers").findOne({ _id: result.insertedId });
+  }
+
+  if (!subscriber) {
+    throw new Error(`Could not create or load subscriber ${to}`);
+  }
+
+  const unsubscribeToken = signUnsubscribeToken({
+    subscriberId: subscriber._id.toString(),
+    source: "manual-send",
+    manualSendId: new ObjectId().toString()
+  });
+  return `${config.PUBLIC_BASE_URL}/u/${encodeURIComponent(unsubscribeToken)}`;
+}
+
+function sendManualError(
+  res: Response,
+  status: number,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>
+) {
+  res.status(status).json({
+    ok: false,
+    error: {
+      code,
+      message,
+      ...(details ? { details } : {})
+    }
+  });
+}
 
 function findReactTemplate(slug: string, category: "campaign" | "transactional") {
   try {

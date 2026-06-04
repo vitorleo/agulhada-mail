@@ -100,6 +100,50 @@ BCC recipients are delivery metadata. They are format-validated before sending, 
 
 Transactional email ignores marketing unsubscribe, but respects complaint, hard bounce, and manual global suppression.
 
+## Manual Email
+
+`POST /api/manual/send`
+
+Sends a trusted one-off React Email template through SES for admin tools such as `agulhada-backend`.
+
+```json
+{
+  "templateSlug": "trial-expiring",
+  "to": "person@example.com",
+  "toName": "Person",
+  "subjectOverride": "Optional trusted admin subject",
+  "data": {
+    "email": "person@example.com",
+    "firstName": "Person",
+    "name": "Person",
+    "userId": "agulhada-user-id"
+  }
+}
+```
+
+`subjectOverride` is optional. When present, Agulhada Mail uses it as the SES subject; otherwise it uses the registered React Email template subject.
+
+The manual endpoint supports registered React Email transactional and campaign templates. Callers do not send a category; Agulhada Mail resolves the category from the template registry.
+
+Compliance behavior:
+
+- Transactional templates check global suppressions only and do not require marketing unsubscribe handling.
+- Campaign templates check both global and marketing suppressions.
+- Campaign templates receive an Agulhada Mail unsubscribe URL before rendering and are sent with List-Unsubscribe headers.
+
+Success returns:
+
+```json
+{
+  "ok": true,
+  "messageId": "ses-message-id"
+}
+```
+
+The endpoint returns structured non-2xx JSON errors for invalid auth, validation failures, unknown templates, suppressions, rendering failures, and SES send failures.
+
+This endpoint is implemented only in Agulhada Mail. This change does not modify `agulhada-backend` or `didineedles`.
+
 ## Unsubscribe
 
 `GET /u/:token`
