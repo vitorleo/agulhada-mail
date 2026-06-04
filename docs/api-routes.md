@@ -78,11 +78,25 @@ Sends immediately through SES.
   "templateSlug": "welcome",
   "to": "person@example.com",
   "toName": "Person",
+  "bcc": "Agulhada.com <contato@agulhada.com>",
   "data": {
     "firstName": "Person"
   }
 }
 ```
+
+`bcc` is optional and may be either a single recipient string or an array of recipient strings:
+
+```json
+{
+  "bcc": [
+    "Agulhada.com <contato@agulhada.com>",
+    "support@example.com"
+  ]
+}
+```
+
+BCC recipients are delivery metadata. They are format-validated before sending, passed to SES as blind-copy recipients, and are not added to template `data`.
 
 Transactional email ignores marketing unsubscribe, but respects complaint, hard bounce, and manual global suppression.
 
@@ -107,4 +121,3 @@ Events handled:
 - `Bounce`: save event; suppress permanent bounces globally.
 - `Complaint`: save event; suppress globally.
 - `Delivery`, `Send`, `Open`, `Click`, `Reject`, `Rendering Failure`, `DeliveryDelay`, `Subscription`: save event and update delivery stats where possible.
-

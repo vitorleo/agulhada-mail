@@ -6,6 +6,7 @@ const ses = new SESv2Client({ region: config.AWS_REGION });
 type SendParams = {
   to: string;
   toName?: string;
+  bcc?: string[];
   subject: string;
   html: string;
   text: string;
@@ -28,7 +29,8 @@ export async function sendWithSes(params: SendParams): Promise<string> {
   const command = new SendEmailCommand({
     FromEmailAddress: formatAddress(config.SES_FROM_EMAIL, config.SES_FROM_NAME),
     Destination: {
-      ToAddresses: [formatAddress(params.to, params.toName)]
+      ToAddresses: [formatAddress(params.to, params.toName)],
+      ...(params.bcc?.length ? { BccAddresses: params.bcc } : {})
     },
     ConfigurationSetName: config.SES_CONFIGURATION_SET,
     EmailTags: Object.entries(params.tags).map(([Name, Value]) => ({ Name, Value })),

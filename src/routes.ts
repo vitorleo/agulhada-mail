@@ -12,6 +12,10 @@ import type { EmailTemplate } from "./types.js";
 
 export const router = express.Router();
 
+const bccRecipientSchema = z.string().trim().min(1).refine(isValidEmailRecipient, {
+  message: "Invalid email address"
+});
+
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (token !== config.API_ADMIN_TOKEN) {
@@ -221,8 +225,10 @@ router.post("/api/transactional/send", requireAdmin, async (req, res) => {
     templateSlug: z.string().min(1),
     to: z.string().email(),
     toName: z.string().optional(),
+    bcc: z.union([bccRecipientSchema, z.array(bccRecipientSchema)]).optional(),
     data: z.record(z.unknown()).default({})
   }).parse(req.body);
+  const bcc = normalizeBcc(input.bcc);
 
   const db = await getDb();
   const suppressed = await db.collection("suppressions").findOne({
@@ -252,6 +258,7 @@ router.post("/api/transactional/send", requireAdmin, async (req, res) => {
   const messageId = await sendWithSes({
     to: input.to,
     toName: input.toName,
+    bcc,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
@@ -269,6 +276,19 @@ function findReactTemplate(slug: string, category: "campaign" | "transactional")
     if (error instanceof ReactEmailTemplateError) return null;
     throw error;
   }
+}
+
+function normalizeBcc(bcc: string | string[] | undefined): string[] | undefined {
+  if (!bcc) return undefined;
+  const recipients = Array.isArray(bcc) ? bcc : [bcc];
+  return recipients.length ? recipients : undefined;
+}
+
+function isValidEmailRecipient(value: string): boolean {
+  const trimmed = value.trim();
+  const angleMatch = trimmed.match(/^.+<([^<>]+)>$/);
+  const email = angleMatch ? angleMatch[1].trim() : trimmed;
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email);
 }
 
 router.get("/u/:token", async (req, res) => {
