@@ -36,10 +36,15 @@ function handleDetails(event) {
   event.preventDefault();
   clearError();
   const values = Object.fromEntries(new FormData(event.currentTarget));
+  const templateSlug = values.templateSlug.trim();
+  if (!state.context.templates.some((template) => template.slug === templateSlug)) {
+    showError("Choose a campaign template before continuing.");
+    return;
+  }
   state.details = {
     campaignName: values.campaignName.trim(),
     listSlug: values.listSlug.trim(),
-    templateSlug: values.templateSlug,
+    templateSlug,
     subjectOverride: values.subjectOverride.trim()
   };
   showStep("recipients");
@@ -155,6 +160,8 @@ function showStep(name) {
 
 function fillTemplates() {
   const select = document.querySelector("#template-slug");
+  select.replaceChildren(new Option("Choose a campaign template...", "", true, true));
+  select.options[0].disabled = true;
   state.context.templates.forEach((template) => select.add(new Option(`${template.name} (${template.slug})`, template.slug)));
   updateTemplateSubject();
 }
