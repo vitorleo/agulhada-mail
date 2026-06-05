@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit",
     "test": "tsx --test src/localAdmin/*.test.ts",
+    "check:worker-processes": "tsx scripts/check-worker-processes.ts",
     "create-indexes": "tsx scripts/create-indexes.ts",
     "cleanup:mailjet": "tsx scripts/cleanup-mailjet-import.ts",
     "export:mailjet-templates": "tsx scripts/export-mailjet-templates.ts",

@@ -92,7 +92,7 @@ export async function processJob(job: EmailJob): Promise<void> {
           sentAt: new Date(),
           updatedAt: new Date()
         },
-        $unset: { leasedUntil: "" }
+        $unset: { leasedUntil: "", lastError: "" }
       }
     );
   } catch (error) {
