@@ -32,6 +32,14 @@ npm run worker
 
 The API server starts on `http://localhost:3025` by default.
 
+For the loopback-only campaign administration UI:
+
+```bash
+npm run admin
+```
+
+Open `http://127.0.0.1:3030`. The local UI administers MongoDB, while all immediate and queued email delivery remains on the VPS. It must not be added to VPS startup or nginx.
+
 ## Core Flows
 
 - Transactional email: `POST /api/transactional/send` sends immediately unless the address is globally suppressed.
@@ -49,3 +57,4 @@ The API server starts on `http://localhost:3025` by default.
 - [React Email templates](docs/react-email-templates.md)
 - [Stripe webhook welcome email](docs/stripe-webhook-welcome-email.md)
 - [Didineedles accept-promo welcome email](docs/didineedles-accept-promo-welcome.md)
+- [Local campaign admin](docs/local-campaign-admin.md)

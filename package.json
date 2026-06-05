@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "admin": "tsx watch src/localAdmin/server.ts",
     "worker": "tsx watch src/worker.ts",
     "start": "node dist/src/server.js",
     "start:worker": "node dist/src/worker.js",
     "build": "tsc -p tsconfig.json",
     "check": "tsc --noEmit",
+    "test": "tsx --test src/localAdmin/*.test.ts",
     "create-indexes": "tsx scripts/create-indexes.ts",
     "cleanup:mailjet": "tsx scripts/cleanup-mailjet-import.ts",
     "export:mailjet-templates": "tsx scripts/export-mailjet-templates.ts",
@@ -19,6 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.600.0",
     "@react-email/render": "^2.0.8",
+    "csv-parse": "^6.2.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "handlebars": "^4.7.8",

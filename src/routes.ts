@@ -8,6 +8,14 @@ import { renderTemplate } from "./templates.js";
 import { renderReactEmailTemplate } from "./emailTemplates/render.js";
 import { getReactEmailTemplate, ReactEmailTemplateError } from "./emailTemplates/registry.js";
 import { sendWithSes } from "./mailer.js";
+import {
+  CampaignInputError,
+  CampaignNotFoundError,
+  createCampaign,
+  enqueueCampaign,
+  importSubscribers,
+  preflightCampaign
+} from "./campaigns.js";
 import type { EmailTemplate, Subscriber } from "./types.js";
 
 export const router = express.Router();
@@ -71,54 +79,8 @@ router.post("/api/subscribers/import", requireAdmin, async (req, res) => {
     })).min(1)
   }).parse(req.body);
 
-  const db = await getDb();
-  const now = new Date();
-  const list = await db.collection("lists").findOneAndUpdate(
-    { slug: input.listSlug },
-    { $set: { slug: input.listSlug, name: input.listSlug, updatedAt: now }, $setOnInsert: { createdAt: now } },
-    { upsert: true, returnDocument: "after" }
-  );
-  if (!list) {
-    res.status(500).json({ error: "Could not create or load list" });
-    return;
-  }
-
-  let imported = 0;
-  for (const subscriber of input.subscribers) {
-    const emailLower = subscriber.email.toLowerCase();
-    const saved = await db.collection("subscribers").findOneAndUpdate(
-      { emailLower },
-      {
-        $set: {
-          ...subscriber,
-          emailLower,
-          status: "subscribed",
-          updatedAt: now
-        },
-        $setOnInsert: {
-          subscribedAt: now,
-          createdAt: now
-        }
-      },
-      { upsert: true, returnDocument: "after" }
-    );
-    if (!saved) {
-      res.status(500).json({ error: `Could not create or load subscriber ${subscriber.email}` });
-      return;
-    }
-
-    await db.collection("list_members").updateOne(
-      { listId: list._id, subscriberId: saved._id },
-      {
-        $set: { status: "active", updatedAt: now },
-        $setOnInsert: { subscribedAt: now, createdAt: now }
-      },
-      { upsert: true }
-    );
-    imported++;
-  }
-
-  res.status(201).json({ ok: true, imported });
+  const result = await importSubscribers(input.listSlug, input.subscribers);
+  res.status(201).json({ ok: true, ...result });
 });
 
 router.post("/api/campaigns", requireAdmin, async (req, res) => {
@@ -129,102 +91,42 @@ router.post("/api/campaigns", requireAdmin, async (req, res) => {
     subjectOverride: z.string().optional()
   }).parse(req.body);
 
-  const db = await getDb();
-  const list = await db.collection("lists").findOne({ slug: input.listSlug });
-  const template = await db.collection("email_templates").findOne({ slug: input.templateSlug, category: "campaign" });
-  const reactTemplate = findReactTemplate(input.templateSlug, "campaign");
-  if (!list || (!template && !reactTemplate)) {
-    res.status(400).json({ error: "List or campaign template not found" });
-    return;
+  try {
+    const result = await createCampaign(input);
+    res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof CampaignInputError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    throw error;
   }
-
-  const now = new Date();
-  const result = await db.collection("campaigns").insertOne({
-    name: input.name,
-    listId: list._id,
-    templateId: template?._id,
-    templateSlug: input.templateSlug,
-    subjectOverride: input.subjectOverride,
-    status: "draft",
-    stats: {},
-    createdAt: now,
-    updatedAt: now
-  });
-
-  res.status(201).json({ ok: true, campaignId: result.insertedId });
 });
 
 router.post("/api/campaigns/:campaignId/enqueue", requireAdmin, async (req, res) => {
-  const campaignId = new ObjectId(req.params.campaignId);
-  const db = await getDb();
-  const campaign = await db.collection("campaigns").findOne({ _id: campaignId });
-  if (!campaign) {
-    res.status(404).json({ error: "Campaign not found" });
-    return;
+  try {
+    const result = await enqueueCampaign(req.params.campaignId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    if (error instanceof CampaignNotFoundError) {
+      res.status(404).json({ error: "Campaign not found" });
+      return;
+    }
+    throw error;
   }
+});
 
-  const members = db.collection("list_members").find({ listId: campaign.listId, status: "active" });
-  const now = new Date();
-  let queued = 0;
-
-  for await (const member of members) {
-    const subscriber = await db.collection("subscribers").findOne({
-      _id: member.subscriberId,
-      status: "subscribed"
-    });
-    if (!subscriber) continue;
-
-    const suppressed = await db.collection("suppressions").findOne({
-      emailLower: subscriber.emailLower,
-      scope: { $in: ["global", "marketing"] }
-    });
-    if (suppressed) continue;
-
-    const unsubscribeToken = signUnsubscribeToken({
-      subscriberId: subscriber._id.toString(),
-      campaignId: campaign._id.toString()
-    });
-
-    await db.collection("email_jobs").updateOne(
-      { campaignId: campaign._id, subscriberId: subscriber._id },
-      {
-        $setOnInsert: {
-          kind: "campaign",
-          status: "pending",
-          campaignId: campaign._id,
-          templateId: campaign.templateId,
-          templateSlug: campaign.templateSlug,
-          subscriberId: subscriber._id,
-          to: subscriber.email,
-          toName: subscriber.name || subscriber.firstName,
-          subject: campaign.subjectOverride || "",
-          data: {
-            firstName: subscriber.firstName || subscriber.name || "",
-            name: subscriber.name || "",
-            email: subscriber.email,
-            source: subscriber.source || "",
-            campaignId: campaign._id.toString(),
-            campaignName: campaign.name || ""
-          },
-          category: "marketing",
-          unsubscribeToken,
-          attempts: 0,
-          nextAttemptAt: now,
-          createdAt: now,
-          updatedAt: now
-        }
-      },
-      { upsert: true }
-    );
-    queued++;
+router.get("/api/campaigns/:campaignId/preflight", requireAdmin, async (req, res) => {
+  try {
+    const summary = await preflightCampaign(req.params.campaignId);
+    res.json({ ok: true, summary });
+  } catch (error) {
+    if (error instanceof CampaignNotFoundError) {
+      res.status(404).json({ error: "Campaign not found" });
+      return;
+    }
+    throw error;
   }
-
-  await db.collection("campaigns").updateOne(
-    { _id: campaign._id },
-    { $set: { status: "queued", updatedAt: new Date() }, $inc: { "stats.queued": queued } }
-  );
-
-  res.json({ ok: true, queued });
 });
 
 router.post("/api/transactional/send", requireAdmin, async (req, res) => {

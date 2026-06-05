@@ -8,6 +8,8 @@ This app is wired into `vps-docker` as:
 - Host app path: `/home/vitor/apps/agulhada-mail`
 - Container app path: `/app/agulhada-mail`
 
+The loopback campaign administration command (`npm run admin`) is local-development-only. Do not add it to PM2, Docker Compose, nginx, or VPS startup.
+
 ## On Local Machine
 
 Push both repos:

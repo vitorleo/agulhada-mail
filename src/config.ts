@@ -3,7 +3,9 @@ import { z } from "zod";
 
 const schema = z.object({
   PORT: z.coerce.number().default(3025),
+  LOCAL_ADMIN_PORT: z.coerce.number().int().positive().default(3030),
   PUBLIC_BASE_URL: z.string().url(),
+  VPS_API_BASE_URL: z.string().url().optional(),
   MONGO_DATABASE_URL: z.string().min(1),
   MONGO_DATABASE_NAME: z.string().default("agulhada_mail"),
   AWS_REGION: z.string().default("sa-east-1"),
@@ -18,4 +20,8 @@ const schema = z.object({
   SEND_RATE_PER_SECOND: z.coerce.number().positive().default(5)
 });
 
-export const config = schema.parse(process.env);
+const parsed = schema.parse(process.env);
+export const config = {
+  ...parsed,
+  VPS_API_BASE_URL: parsed.VPS_API_BASE_URL || parsed.PUBLIC_BASE_URL
+};

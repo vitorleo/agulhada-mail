@@ -61,7 +61,11 @@ Creates a draft.
 
 `POST /api/campaigns/:campaignId/enqueue`
 
-Enqueues one `email_jobs` document per active subscriber.
+Enqueues one `email_jobs` document per eligible active subscriber and returns actual newly queued and excluded counts. Repeated requests do not create duplicate jobs.
+
+`GET /api/campaigns/:campaignId/preflight`
+
+Returns active member, unsubscribed, suppressed, existing-job, and currently eligible counts without creating jobs.
 
 `POST /api/campaigns/:campaignId/pause`
 

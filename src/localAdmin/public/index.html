@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agulhada Mail Campaign Admin</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Local-only control panel</p>
+        <h1>Campaign launch desk</h1>
+      </div>
+      <dl class="environment" aria-label="Active environment">
+        <div><dt>Database</dt><dd id="database-name">Loading...</dd></div>
+        <div><dt>VPS API</dt><dd id="vps-api">Loading...</dd></div>
+        <div><dt>Delivery</dt><dd>VPS worker only</dd></div>
+      </dl>
+    </header>
+
+    <main>
+      <nav aria-label="Campaign progress">
+        <ol class="progress">
+          <li data-progress="details" aria-current="step">1. Details</li>
+          <li data-progress="recipients">2. Recipients</li>
+          <li data-progress="test">3. Test</li>
+          <li data-progress="review">4. Review</li>
+          <li data-progress="enqueue">5. Enqueue</li>
+        </ol>
+      </nav>
+
+      <div id="status" class="status" role="status" aria-live="polite">Loading campaign templates and lists...</div>
+      <div id="error-summary" class="error-summary" role="alert" tabindex="-1" hidden></div>
+
+      <section class="panel" data-step="details">
+        <p class="step-label">Step 1</p>
+        <h2>Campaign details</h2>
+        <form id="details-form">
+          <div class="field">
+            <label for="campaign-name">Campaign name <span aria-hidden="true">*</span></label>
+            <input id="campaign-name" name="campaignName" required maxlength="120" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="list-slug">List slug <span aria-hidden="true">*</span></label>
+            <input id="list-slug" name="listSlug" list="list-options" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off">
+            <datalist id="list-options"></datalist>
+            <p class="hint">Choose an existing list or enter a new kebab-case slug.</p>
+          </div>
+          <div class="field">
+            <label for="template-slug">Campaign template <span aria-hidden="true">*</span></label>
+            <select id="template-slug" name="templateSlug" required></select>
+            <p id="template-subject" class="hint"></p>
+          </div>
+          <div class="field">
+            <label for="subject-override">Subject override</label>
+            <input id="subject-override" name="subjectOverride" maxlength="300">
+          </div>
+          <button type="submit">Continue to recipients</button>
+        </form>
+      </section>
+
+      <section class="panel" data-step="recipients" hidden>
+        <p class="step-label">Step 2</p>
+        <h2>Review and import recipients</h2>
+        <form id="csv-form">
+          <div class="field">
+            <label for="csv-file">Recipient CSV <span aria-hidden="true">*</span></label>
+            <input id="csv-file" name="csvFile" type="file" accept=".csv,text/csv" required>
+            <p class="hint">Required column: email. Optional: firstName, name, source, userId. Maximum 5,000 rows.</p>
+          </div>
+          <button type="submit">Preview CSV</button>
+        </form>
+        <div id="csv-results" hidden>
+          <div id="csv-counts" class="metrics"></div>
+          <div class="table-wrap">
+            <table>
+              <caption>First valid recipients</caption>
+              <thead><tr><th>Email</th><th>Name</th><th>Source</th></tr></thead>
+              <tbody id="recipient-preview"></tbody>
+            </table>
+          </div>
+          <div class="actions">
+            <button type="button" class="secondary" data-back="details">Back</button>
+            <button type="button" id="import-recipients">Import reviewed recipients</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-step="test" hidden>
+        <p class="step-label">Step 3</p>
+        <h2>Send a controlled test from the VPS</h2>
+        <p>The local admin will request this immediate send from the authenticated VPS API. It will not use local SES credentials.</p>
+        <form id="test-form">
+          <div class="field">
+            <label for="test-email">Test recipient <span aria-hidden="true">*</span></label>
+            <input id="test-email" name="to" type="email" required autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="test-name">Recipient name</label>
+            <input id="test-name" name="toName" autocomplete="name">
+          </div>
+          <div class="actions">
+            <button type="button" class="secondary" data-back="recipients">Back</button>
+            <button type="submit">Send VPS test</button>
+            <button type="button" class="secondary" id="continue-without-test">Continue without test</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel" data-step="review" hidden>
+        <p class="step-label">Step 4</p>
+        <h2>Create draft and review eligibility</h2>
+        <dl id="campaign-review" class="review-list"></dl>
+        <div class="actions">
+          <button type="button" class="secondary" data-back="test">Back</button>
+          <button type="button" id="create-draft">Create draft and calculate preflight</button>
+        </div>
+        <div id="preflight-results" hidden>
+          <h3>Pre-enqueue eligibility</h3>
+          <div id="preflight-counts" class="metrics"></div>
+          <button type="button" id="continue-to-enqueue">Continue to final confirmation</button>
+        </div>
+      </section>
+
+      <section class="panel danger-panel" data-step="enqueue" hidden>
+        <p class="step-label">Step 5</p>
+        <h2>Final enqueue confirmation</h2>
+        <p><strong>The VPS worker may begin sending immediately after jobs are created.</strong> The local admin does not send or process these jobs.</p>
+        <form id="enqueue-form">
+          <div class="field">
+            <label for="confirmation-name">Type the exact campaign name: <strong id="required-confirmation-name"></strong></label>
+            <input id="confirmation-name" name="confirmationName" required autocomplete="off">
+          </div>
+          <label class="check">
+            <input id="acknowledge-send" name="acknowledgeImmediateSend" type="checkbox" required>
+            I understand that the VPS worker may send this campaign immediately.
+          </label>
+          <div class="actions">
+            <button type="button" class="secondary" data-back="review">Back</button>
+            <button type="submit" class="danger">Create queue jobs</button>
+          </div>
+        </form>
+        <div id="final-results" hidden></div>
+      </section>
+    </main>
+  </body>
+</html>
