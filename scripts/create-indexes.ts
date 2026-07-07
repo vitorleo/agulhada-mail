@@ -10,6 +10,7 @@ async function main() {
 
   await db.collection("lists").createIndex({ slug: 1 }, { unique: true });
   await db.collection("list_members").createIndex({ listId: 1, subscriberId: 1 }, { unique: true });
+  await db.collection("list_members").createIndex({ listId: 1, status: 1, subscriberId: 1 });
   await db.collection("list_members").createIndex({ subscriberId: 1, status: 1 });
 
   await db.collection("email_templates").createIndex({ slug: 1 }, { unique: true });

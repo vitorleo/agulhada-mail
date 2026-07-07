@@ -33,6 +33,10 @@ type EligibleRecipient = {
   subscriber: Subscriber;
 };
 
+const ELIGIBILITY_BATCH_SIZE = 1000;
+const ENQUEUE_BULK_BATCH_SIZE = 500;
+const IMPORT_BULK_BATCH_SIZE = 1000;
+
 export function listCampaignTemplates() {
   return Object.values(reactEmailTemplates)
     .filter((template) => template.category === "campaign")
@@ -58,27 +62,48 @@ export async function importSubscribers(
   if (!list) throw new Error("Could not create or load list");
 
   let imported = 0;
-  for (const subscriber of subscribers) {
-    const emailLower = subscriber.email.toLowerCase();
-    const saved = await database.collection("subscribers").findOneAndUpdate(
-      { emailLower },
-      {
-        $set: { ...subscriber, emailLower, status: "subscribed", updatedAt: now },
-        $setOnInsert: { subscribedAt: now, createdAt: now }
-      },
-      { upsert: true, returnDocument: "after" }
+  for (const chunk of chunkArray(subscribers, IMPORT_BULK_BATCH_SIZE)) {
+    await database.collection("subscribers").bulkWrite(
+      chunk.map((subscriber) => {
+        const emailLower = subscriber.email.toLowerCase();
+        return {
+          updateOne: {
+            filter: { emailLower },
+            update: {
+              $set: { ...subscriber, emailLower, status: "subscribed", updatedAt: now },
+              $setOnInsert: { subscribedAt: now, createdAt: now }
+            },
+            upsert: true
+          }
+        };
+      }),
+      { ordered: false }
     );
-    if (!saved) throw new Error(`Could not create or load subscriber ${subscriber.email}`);
 
-    await database.collection("list_members").updateOne(
-      { listId: list._id, subscriberId: saved._id },
-      {
-        $set: { status: "active", updatedAt: now },
-        $setOnInsert: { subscribedAt: now, createdAt: now }
-      },
-      { upsert: true }
+    const emailLowers = chunk.map((subscriber) => subscriber.email.toLowerCase());
+    const savedSubscribers = await database.collection<Subscriber>("subscribers")
+      .find({ emailLower: { $in: emailLowers } }, { projection: { _id: 1, emailLower: 1 } })
+      .toArray();
+    const subscriberByEmail = new Map(savedSubscribers.map((subscriber) => [subscriber.emailLower, subscriber]));
+
+    await database.collection("list_members").bulkWrite(
+      chunk.map((subscriber) => {
+        const saved = subscriberByEmail.get(subscriber.email.toLowerCase());
+        if (!saved) throw new Error(`Could not create or load subscriber ${subscriber.email}`);
+        return {
+          updateOne: {
+            filter: { listId: list._id, subscriberId: saved._id },
+            update: {
+              $set: { status: "active", updatedAt: now },
+              $setOnInsert: { subscribedAt: now, createdAt: now }
+            },
+            upsert: true
+          }
+        };
+      }),
+      { ordered: false }
     );
-    imported++;
+    imported += chunk.length;
   }
 
   return { imported, listId: list._id.toString() };
@@ -128,41 +153,48 @@ export async function enqueueCampaign(campaignId: string, db?: Db) {
   const now = new Date();
   let queued = 0;
 
-  for (const { subscriber } of eligibleRecipients) {
-    const unsubscribeToken = signUnsubscribeToken({
-      subscriberId: subscriber._id.toString(),
-      campaignId: campaign._id.toString()
-    });
-    const result = await database.collection("email_jobs").updateOne(
-      { campaignId: campaign._id, subscriberId: subscriber._id },
-      {
-        $setOnInsert: {
-          kind: "campaign",
-          status: "pending",
-          campaignId: campaign._id,
-          templateId: campaign.templateId,
-          templateSlug: campaign.templateSlug,
-          subscriberId: subscriber._id,
-          to: subscriber.email,
-          toName: subscriber.name || subscriber.firstName,
-          subject: campaign.subjectOverride || "",
-          data: {
-            firstName: subscriber.firstName || subscriber.name || "",
-            name: subscriber.name || "",
-            email: subscriber.email,
-            source: subscriber.source || "",
-            campaignId: campaign._id.toString(),
-            campaignName: campaign.name || ""
-          },
-          category: "marketing",
-          unsubscribeToken,
-          attempts: 0,
-          nextAttemptAt: now,
-          createdAt: now,
-          updatedAt: now
-        }
-      },
-      { upsert: true }
+  for (const chunk of chunkArray(eligibleRecipients, ENQUEUE_BULK_BATCH_SIZE)) {
+    const result = await database.collection("email_jobs").bulkWrite(
+      chunk.map(({ subscriber }) => {
+        const unsubscribeToken = signUnsubscribeToken({
+          subscriberId: subscriber._id.toString(),
+          campaignId: campaign._id.toString()
+        });
+        return {
+          updateOne: {
+            filter: { campaignId: campaign._id, subscriberId: subscriber._id },
+            update: {
+              $setOnInsert: {
+                kind: "campaign",
+                status: "pending",
+                campaignId: campaign._id,
+                templateId: campaign.templateId,
+                templateSlug: campaign.templateSlug,
+                subscriberId: subscriber._id,
+                to: subscriber.email,
+                toName: subscriber.name || subscriber.firstName,
+                subject: campaign.subjectOverride || "",
+                data: {
+                  firstName: subscriber.firstName || subscriber.name || "",
+                  name: subscriber.name || "",
+                  email: subscriber.email,
+                  source: subscriber.source || "",
+                  campaignId: campaign._id.toString(),
+                  campaignName: campaign.name || ""
+                },
+                category: "marketing",
+                unsubscribeToken,
+                attempts: 0,
+                nextAttemptAt: now,
+                createdAt: now,
+                updatedAt: now
+              }
+            },
+            upsert: true
+          }
+        };
+      }),
+      { ordered: false }
     );
     queued += result.upsertedCount;
   }
@@ -197,36 +229,83 @@ async function getEligibleRecipients(campaignId: string, db: Db) {
     eligible: 0
   };
   const eligibleRecipients: EligibleRecipient[] = [];
-  const members = db.collection("list_members").find({ listId: campaign.listId, status: "active" });
+  const members = db.collection("list_members").find(
+    { listId: campaign.listId, status: "active" },
+    { projection: { subscriberId: 1 }, batchSize: ELIGIBILITY_BATCH_SIZE }
+  );
 
+  let batch: Array<{ subscriberId: ObjectId }> = [];
   for await (const member of members) {
+    batch.push({ subscriberId: member.subscriberId });
+    if (batch.length >= ELIGIBILITY_BATCH_SIZE) {
+      await addEligibilityBatch(db, campaign._id, batch, summary, eligibleRecipients);
+      batch = [];
+    }
+  }
+
+  if (batch.length) {
+    await addEligibilityBatch(db, campaign._id, batch, summary, eligibleRecipients);
+  }
+
+  return { campaign, summary, eligibleRecipients };
+}
+
+async function addEligibilityBatch(
+  db: Db,
+  campaignId: ObjectId,
+  members: Array<{ subscriberId: ObjectId }>,
+  summary: EligibilitySummary,
+  eligibleRecipients: EligibleRecipient[]
+) {
+  const subscriberIds = members.map((member) => member.subscriberId);
+  const subscribers = await db.collection<Subscriber>("subscribers")
+    .find({ _id: { $in: subscriberIds } })
+    .toArray();
+  const subscriberById = new Map(subscribers.map((subscriber) => [subscriber._id.toString(), subscriber]));
+  const emailLowers = subscribers
+    .filter((subscriber) => subscriber.status === "subscribed")
+    .map((subscriber) => subscriber.emailLower);
+  const suppressions = emailLowers.length
+    ? await db.collection("suppressions").find({
+        emailLower: { $in: emailLowers },
+        scope: { $in: ["global", "marketing"] }
+      }, { projection: { emailLower: 1 } }).toArray()
+    : [];
+  const suppressedEmails = new Set(suppressions.map((suppression) => suppression.emailLower));
+  const jobs = subscriberIds.length
+    ? await db.collection("email_jobs").find({
+        campaignId,
+        subscriberId: { $in: subscriberIds }
+      }, { projection: { subscriberId: 1 } }).toArray()
+    : [];
+  const existingJobSubscriberIds = new Set(jobs.map((job) => job.subscriberId.toString()));
+
+  for (const member of members) {
     summary.activeMembers++;
-    const subscriber = await db.collection<Subscriber>("subscribers").findOne({ _id: member.subscriberId });
+    const subscriber = subscriberById.get(member.subscriberId.toString());
     if (!subscriber || subscriber.status !== "subscribed") {
       summary.unsubscribed++;
       continue;
     }
-    const suppressed = await db.collection("suppressions").findOne({
-      emailLower: subscriber.emailLower,
-      scope: { $in: ["global", "marketing"] }
-    });
-    if (suppressed) {
+    if (suppressedEmails.has(subscriber.emailLower)) {
       summary.suppressed++;
       continue;
     }
-    const existingJob = await db.collection("email_jobs").findOne({
-      campaignId: campaign._id,
-      subscriberId: subscriber._id
-    });
-    if (existingJob) {
+    if (existingJobSubscriberIds.has(subscriber._id.toString())) {
       summary.existingJobs++;
       continue;
     }
     summary.eligible++;
     eligibleRecipients.push({ subscriber });
   }
+}
 
-  return { campaign, summary, eligibleRecipients };
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function findCampaignTemplate(slug: string) {
