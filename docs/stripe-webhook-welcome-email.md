@@ -21,6 +21,7 @@ Payload:
   "templateSlug": "welcome",
   "to": "customer@example.com",
   "toName": "Customer Name",
+  "bcc": "Agulhada.com <contato@agulhada.com>",
   "data": {
     "email": "customer@example.com",
     "name": "Customer Name",
@@ -126,6 +127,7 @@ async function sendWelcomeEmail(emailTo, customerName, stripeContext = {}) {
         templateSlug: "welcome",
         to: emailTo,
         toName: customerName,
+        bcc: "Agulhada.com <contato@agulhada.com>",
         data: {
           email: emailTo,
           name: customerName,

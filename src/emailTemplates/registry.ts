@@ -1,4 +1,5 @@
 import Promo30Days from "./campaign/Promo30Days.js";
+import AgulhadaParaDayTraders from "./campaign/AgulhadaParaDayTraders.js";
 import {
   mailjetCampaignSubjects,
   Marketing30Days,
@@ -33,6 +34,13 @@ export const reactEmailTemplates = {
     category: "campaign",
     subject: "30 dias para testar o Agulhada.com",
     component: Promo30Days
+  },
+  "agulhada-para-day-traders": {
+    slug: "agulhada-para-day-traders",
+    name: "Agulhada para Day Traders",
+    category: "campaign",
+    subject: "Gráfico de 5 minutos liberado no VIP",
+    component: AgulhadaParaDayTraders
   },
   "marketing-30-days-cst": {
     slug: "marketing-30-days-cst",
