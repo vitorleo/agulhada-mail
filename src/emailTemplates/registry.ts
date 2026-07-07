@@ -39,7 +39,7 @@ export const reactEmailTemplates = {
     slug: "agulhada-para-day-traders",
     name: "Agulhada para Day Traders",
     category: "campaign",
-    subject: "Gráfico de 5 minutos liberado no VIP",
+    subject: "Gráfico de 5 minutos liberado no Plano VIP",
     component: AgulhadaParaDayTraders
   },
   "marketing-30-days-cst": {
