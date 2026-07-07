@@ -6,7 +6,7 @@ import { EmailLayout } from "../components/EmailLayout.js";
 import type { ReactEmailTemplateProps } from "../types.js";
 
 export default function AgulhadaParaDayTraders({ data }: ReactEmailTemplateProps) {
-  const name = stringValue(data.name) || stringValue(data.firstName) || "Trader";
+  const name = stringValue(data.firstName) || stringValue(data.name) || "Trader";
   const email = stringValue(data.email);
   const promoUrl = buildPromoUrl(email);
 
