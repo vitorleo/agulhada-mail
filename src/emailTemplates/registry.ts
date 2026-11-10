@@ -1,4 +1,5 @@
 import Promo30Days from "./campaign/Promo30Days.js";
+import BlackFriday2026 from "./campaign/BlackFriday2026.js";
 import AgulhadaParaDayTraders from "./campaign/AgulhadaParaDayTraders.js";
 import {
   mailjetCampaignSubjects,
@@ -14,6 +15,13 @@ import type { EmailCategory } from "../types.js";
 import type { ReactEmailTemplateDefinition } from "./types.js";
 
 export const reactEmailTemplates = {
+  "black-friday-2026": {
+    slug: "black-friday-2026",
+    name: "Black Friday 2026",
+    category: "campaign",
+    subject: "Agulhada + Black Friday = até 50% OFF",
+    component: BlackFriday2026
+  },
   welcome: {
     slug: "welcome",
     name: "Welcome",
