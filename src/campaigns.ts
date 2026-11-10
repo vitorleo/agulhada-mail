@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import { signUnsubscribeToken } from "./crypto.js";
 import { getDb } from "./db.js";
 import { getReactEmailTemplate, ReactEmailTemplateError, reactEmailTemplates } from "./emailTemplates/registry.js";
-import type { Subscriber } from "./types.js";
+import type { JobStatus, Subscriber } from "./types.js";
 
 export type ImportSubscriberInput = {
   email: string;
@@ -29,6 +29,32 @@ export type EligibilitySummary = {
   eligible: number;
 };
 
+export type CampaignStatsJobCounts = Record<JobStatus, number> & {
+  queued: number;
+};
+
+export type CampaignStatsEventCounts = {
+  delivery: number;
+  bounce: number;
+  complaint: number;
+  open: number;
+  uniqueOpens: number;
+  click: number;
+  uniqueClicks: number;
+};
+
+export type CampaignStats = {
+  campaignId: string;
+  name: string;
+  templateSlug: string;
+  subject: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  jobs: CampaignStatsJobCounts;
+  events: CampaignStatsEventCounts;
+};
+
 type EligibleRecipient = {
   subscriber: Subscriber;
 };
@@ -36,6 +62,9 @@ type EligibleRecipient = {
 const ELIGIBILITY_BATCH_SIZE = 1000;
 const ENQUEUE_BULK_BATCH_SIZE = 500;
 const IMPORT_BULK_BATCH_SIZE = 1000;
+const DEFAULT_CAMPAIGN_STATS_LIMIT = 25;
+const MAX_CAMPAIGN_STATS_LIMIT = 100;
+const JOB_STATUSES: JobStatus[] = ["pending", "leased", "sent", "retrying", "failed", "suppressed"];
 
 export function listCampaignTemplates() {
   return Object.values(reactEmailTemplates)
@@ -145,6 +174,49 @@ export async function createCampaign(input: CreateCampaignInput, db?: Db) {
 export async function preflightCampaign(campaignId: string, db?: Db): Promise<EligibilitySummary> {
   const { summary } = await getEligibleRecipients(campaignId, db || await getDb());
   return summary;
+}
+
+export async function listCampaignStats(input: { campaignId?: string; limit?: number } = {}, db?: Db): Promise<CampaignStats[]> {
+  const database = db || await getDb();
+  const limit = normalizeStatsLimit(input.limit);
+  const campaignFilter = input.campaignId
+    ? { _id: parseCampaignObjectId(input.campaignId) }
+    : {};
+  const campaigns = await database.collection("campaigns")
+    .find(campaignFilter, {
+      projection: {
+        name: 1,
+        templateSlug: 1,
+        subjectOverride: 1,
+        status: 1,
+        createdAt: 1,
+        updatedAt: 1
+      }
+    })
+    .sort({ createdAt: -1 })
+    .limit(input.campaignId ? 1 : limit)
+    .toArray();
+
+  if (input.campaignId && campaigns.length === 0) {
+    throw new CampaignNotFoundError();
+  }
+  if (campaigns.length === 0) return [];
+
+  const campaignIds = campaigns.map((campaign) => campaign._id);
+  const jobCountsByCampaign = await getJobCountsByCampaign(database, campaignIds);
+  const eventCountsByCampaign = await getEventCountsByCampaign(database, campaignIds);
+
+  return campaigns.map((campaign) => ({
+    campaignId: campaign._id.toString(),
+    name: String(campaign.name || ""),
+    templateSlug: String(campaign.templateSlug || ""),
+    subject: String(campaign.subjectOverride || ""),
+    status: String(campaign.status || ""),
+    createdAt: toIsoString(campaign.createdAt),
+    updatedAt: toIsoString(campaign.updatedAt),
+    jobs: jobCountsByCampaign.get(campaign._id.toString()) || emptyJobCounts(),
+    events: eventCountsByCampaign.get(campaign._id.toString()) || emptyEventCounts()
+  }));
 }
 
 export async function enqueueCampaign(campaignId: string, db?: Db) {
@@ -298,6 +370,122 @@ async function addEligibilityBatch(
     summary.eligible++;
     eligibleRecipients.push({ subscriber });
   }
+}
+
+async function getJobCountsByCampaign(db: Db, campaignIds: ObjectId[]) {
+  const jobs = await db.collection("email_jobs").find({
+    campaignId: { $in: campaignIds }
+  }, { projection: { campaignId: 1, status: 1 } }).toArray();
+  const countsByCampaign = new Map<string, CampaignStatsJobCounts>();
+
+  for (const job of jobs) {
+    const campaignId = job.campaignId?.toString();
+    if (!campaignId) continue;
+    const counts = getOrCreate(countsByCampaign, campaignId, emptyJobCounts);
+    counts.queued++;
+    if (JOB_STATUSES.includes(job.status)) {
+      counts[job.status as JobStatus]++;
+    }
+  }
+
+  return countsByCampaign;
+}
+
+async function getEventCountsByCampaign(db: Db, campaignIds: ObjectId[]) {
+  const events = await db.collection("email_events").find({
+    campaignId: { $in: campaignIds }
+  }, { projection: { campaignId: 1, eventType: 1, subscriberId: 1, email: 1 } }).toArray();
+  const countsByCampaign = new Map<string, CampaignStatsEventCounts>();
+  const uniqueOpensByCampaign = new Map<string, Set<string>>();
+  const uniqueClicksByCampaign = new Map<string, Set<string>>();
+
+  for (const event of events) {
+    const campaignId = event.campaignId?.toString();
+    if (!campaignId) continue;
+    const counts = getOrCreate(countsByCampaign, campaignId, emptyEventCounts);
+    const eventType = String(event.eventType || "").toLowerCase();
+
+    if (eventType === "delivery") counts.delivery++;
+    if (eventType === "bounce") counts.bounce++;
+    if (eventType === "complaint") counts.complaint++;
+    if (eventType === "open") {
+      counts.open++;
+      addUniqueEventRecipient(uniqueOpensByCampaign, campaignId, event);
+    }
+    if (eventType === "click") {
+      counts.click++;
+      addUniqueEventRecipient(uniqueClicksByCampaign, campaignId, event);
+    }
+  }
+
+  for (const [campaignId, recipients] of uniqueOpensByCampaign) {
+    getOrCreate(countsByCampaign, campaignId, emptyEventCounts).uniqueOpens = recipients.size;
+  }
+  for (const [campaignId, recipients] of uniqueClicksByCampaign) {
+    getOrCreate(countsByCampaign, campaignId, emptyEventCounts).uniqueClicks = recipients.size;
+  }
+
+  return countsByCampaign;
+}
+
+function addUniqueEventRecipient(
+  recipientsByCampaign: Map<string, Set<string>>,
+  campaignId: string,
+  event: Record<string, unknown>
+) {
+  const recipientKey = event.subscriberId instanceof ObjectId
+    ? event.subscriberId.toString()
+    : typeof event.email === "string"
+      ? event.email.toLowerCase()
+      : undefined;
+  if (!recipientKey) return;
+  getOrCreate(recipientsByCampaign, campaignId, () => new Set<string>()).add(recipientKey);
+}
+
+function emptyJobCounts(): CampaignStatsJobCounts {
+  return {
+    queued: 0,
+    pending: 0,
+    leased: 0,
+    sent: 0,
+    retrying: 0,
+    failed: 0,
+    suppressed: 0
+  };
+}
+
+function emptyEventCounts(): CampaignStatsEventCounts {
+  return {
+    delivery: 0,
+    bounce: 0,
+    complaint: 0,
+    open: 0,
+    uniqueOpens: 0,
+    click: 0,
+    uniqueClicks: 0
+  };
+}
+
+function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
+function normalizeStatsLimit(limit: number | undefined) {
+  if (limit === undefined) return DEFAULT_CAMPAIGN_STATS_LIMIT;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_CAMPAIGN_STATS_LIMIT);
+}
+
+function parseCampaignObjectId(campaignId: string) {
+  if (!ObjectId.isValid(campaignId)) throw new CampaignNotFoundError();
+  return new ObjectId(campaignId);
+}
+
+function toIsoString(value: unknown) {
+  return value instanceof Date ? value.toISOString() : "";
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {

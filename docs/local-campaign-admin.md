@@ -27,7 +27,7 @@ Start the UI:
 npm run admin
 ```
 
-Open `http://127.0.0.1:3030`.
+Open `http://127.0.0.1:3030` to launch campaigns. Open `http://127.0.0.1:3030/stats` to review campaign stats.
 
 Do not add `npm run admin` to VPS startup, PM2, Docker Compose, nginx, or any public deployment configuration.
 
@@ -52,6 +52,29 @@ The preview validates addresses, trims values, removes case-insensitive duplicat
 6. Type the exact campaign name and acknowledge that the VPS worker may send immediately.
 7. Enqueue the campaign jobs.
 
+## Campaign Stats
+
+The local admin stats page at `/stats` includes a read-only campaign stats table. It answers the operational questions after a campaign is enqueued: how many jobs exist, how many are still active, how many were sent, and how many provider events show delivery, opens, or clicks.
+
+The table is loaded from the loopback admin server and never exposes MongoDB credentials, AWS credentials, the VPS API token, unsubscribe secrets, raw SES payloads, or SES message ids to the browser.
+
+Displayed columns:
+
+- `Campaign`: campaign name plus template and subject metadata.
+- `Status`: campaign document status such as `draft` or `queued`.
+- `Queued`: total `email_jobs` documents for the campaign.
+- `Active`: jobs currently `pending`, `leased`, or `retrying`.
+- `Sent`: jobs with status `sent`.
+- `Failed`: jobs with status `failed` or `suppressed`.
+- `Delivered`: SES `Delivery` events recorded for the campaign.
+- `Opens`: unique opener count and total SES `Open` event count.
+- `Clicks`: unique clicker count and total SES `Click` event count.
+- `Updated`: campaign `updatedAt` timestamp.
+
+Open and click totals can be higher than the unique counts because SES can emit repeated events for the same recipient. The unique count is the better headline number for "how many emails opened/clicked"; the total count is useful for spotting repeated engagement or tracking noise.
+
+After a campaign is enqueued, the completion state links to `/stats?campaignId=<id>` so the stats page can load that campaign first. Use `Refresh stats` to pull the latest counts from MongoDB. Refreshing stats is read-only: it does not send email, lease jobs, retry jobs, or update campaign state.
+
 ## Smoke Test
 
 Use only internal recipients:
@@ -63,4 +86,5 @@ Use only internal recipients:
 5. Create a draft and confirm preflight does not create jobs.
 6. Verify an incorrect confirmation name and missing acknowledgement are rejected.
 7. Enqueue the internal campaign and confirm the actual queued/excluded counts.
-8. Confirm delivery is performed by the VPS worker.
+8. Refresh campaign stats and confirm the enqueued campaign appears with queued/job counts.
+9. Confirm delivery is performed by the VPS worker.

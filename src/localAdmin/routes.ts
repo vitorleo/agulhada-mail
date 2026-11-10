@@ -1,4 +1,5 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import {
@@ -7,6 +8,7 @@ import {
   createCampaign,
   enqueueCampaign,
   importSubscribers,
+  listCampaignStats,
   listCampaignTemplates,
   preflightCampaign
 } from "../campaigns.js";
@@ -16,9 +18,14 @@ import { consumePreparation, CsvValidationError, previewCsv } from "./csv.js";
 import { validateEnqueueConfirmation } from "./validation.js";
 
 export const localAdminRouter = express.Router();
+const statsPage = fileURLToPath(new URL("./public/stats.html", import.meta.url));
 const asyncRoute = (handler: express.RequestHandler): express.RequestHandler => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
+
+localAdminRouter.get("/stats", (_req, res) => {
+  res.sendFile(statsPage);
+});
 
 localAdminRouter.get("/api/context", asyncRoute(async (_req, res) => {
   const db = await getDb();
@@ -81,6 +88,29 @@ localAdminRouter.post("/api/campaigns", asyncRoute(async (req, res) => {
   } catch (error) {
     if (error instanceof CampaignInputError) {
       res.status(400).json({ ok: false, error: error.message });
+      return;
+    }
+    throw error;
+  }
+}));
+
+localAdminRouter.get("/api/campaigns/stats", asyncRoute(async (req, res) => {
+  const input = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional()
+  }).parse(req.query);
+  res.json({ ok: true, campaigns: await listCampaignStats({ limit: input.limit }) });
+}));
+
+localAdminRouter.get("/api/campaigns/:campaignId/stats", asyncRoute(async (req, res) => {
+  const input = z.object({
+    campaignId: z.string().refine((value) => ObjectId.isValid(value), "Invalid campaign id")
+  }).parse(req.params);
+  try {
+    const campaigns = await listCampaignStats({ campaignId: input.campaignId });
+    res.json({ ok: true, campaign: campaigns[0] });
+  } catch (error) {
+    if (error instanceof CampaignNotFoundError) {
+      res.status(404).json({ ok: false, error: "Campaign not found" });
       return;
     }
     throw error;

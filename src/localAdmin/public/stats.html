@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Campaign Stats | Agulhada Mail Admin</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body data-page="stats">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Local-only control panel</p>
+        <h1>Campaign stats</h1>
+      </div>
+      <dl class="environment" aria-label="Active environment">
+        <div><dt>Database</dt><dd id="database-name">Loading...</dd></div>
+        <div><dt>VPS API</dt><dd id="vps-api">Loading...</dd></div>
+        <div><dt>Delivery</dt><dd>VPS worker only</dd></div>
+      </dl>
+    </header>
+
+    <main>
+      <nav aria-label="Local admin pages" class="page-nav">
+        <a href="/">Launch campaign</a>
+        <a href="/stats" aria-current="page">Campaign stats</a>
+      </nav>
+
+      <div id="status" class="status" role="status" aria-live="polite">Loading campaign stats...</div>
+      <div id="error-summary" class="error-summary" role="alert" tabindex="-1" hidden></div>
+
+      <section class="panel stats-panel" aria-labelledby="campaign-stats-heading">
+        <div class="section-heading">
+          <div>
+            <p class="step-label">Stats</p>
+            <h2 id="campaign-stats-heading">Campaign stats</h2>
+          </div>
+          <button type="button" id="refresh-stats" class="secondary">Refresh stats</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption>Recent campaign delivery and engagement</caption>
+            <thead>
+              <tr>
+                <th scope="col">Campaign</th>
+                <th scope="col">Queued</th>
+                <th scope="col">Active</th>
+                <th scope="col">Sent</th>
+                <th scope="col">Failed</th>
+                <th scope="col">Delivered</th>
+                <th scope="col">Opens</th>
+                <th scope="col">Clicks</th>
+                <th scope="col">Updated</th>
+              </tr>
+            </thead>
+            <tbody id="campaign-stats-body">
+              <tr><td colspan="9">Loading stats...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

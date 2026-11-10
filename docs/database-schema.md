@@ -115,6 +115,8 @@ Indexes:
 }
 ```
 
+The local campaign stats UI uses `campaigns` for campaign identity and timestamps, but it does not rely on the embedded `stats` object as the source of truth. Current queue and delivery state is derived from `email_jobs`; provider and engagement counts are derived from `email_events`.
+
 ## `email_jobs`
 
 ```js
@@ -149,6 +151,14 @@ Indexes:
 - `sesMessageId`
 - TTL/index strategy can be added later for old completed jobs.
 
+Campaign stats count jobs by `campaignId` and `status`:
+
+- `queued`: total jobs for the campaign.
+- `pending`, `leased`, `retrying`: active work still owned by the worker lifecycle.
+- `sent`: jobs accepted by SES.
+- `failed`: jobs that exhausted retries or failed permanently.
+- `suppressed`: jobs skipped because the recipient is suppressed.
+
 ## `email_events`
 
 Raw SES/SNS event storage.
@@ -166,6 +176,16 @@ Raw SES/SNS event storage.
   createdAt: Date
 }
 ```
+
+Campaign stats count provider events by `campaignId` and `eventType`:
+
+- `Delivery`: delivered provider events.
+- `Bounce`: bounce provider events.
+- `Complaint`: complaint provider events.
+- `Open`: total opens plus unique openers.
+- `Click`: total clicks plus unique clickers.
+
+Unique open/click counts deduplicate by `subscriberId` when present. If an event does not have `subscriberId`, the stats fallback is the lowercase `email` value. Historical events without `campaignId` are not included in campaign stats.
 
 ## `suppressions`
 
@@ -185,4 +205,3 @@ Indexes:
 
 - unique `{ emailLower, scope }`
 - `reason`
-

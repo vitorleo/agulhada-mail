@@ -1,7 +1,8 @@
-const state = { context: null, details: null, preparationId: null, campaignId: null };
+const state = { context: null, details: null, preparationId: null, campaignId: null, highlightedCampaignId: null };
 const steps = ["details", "recipients", "test", "review", "enqueue"];
 const status = document.querySelector("#status");
 const errorSummary = document.querySelector("#error-summary");
+const page = document.body.dataset.page || "launch";
 
 init().catch(showError);
 
@@ -9,13 +10,21 @@ async function init() {
   state.context = await api("/api/context");
   text("#database-name", state.context.databaseName);
   text("#vps-api", state.context.vpsApiBaseUrl);
+  if (page === "stats") {
+    bindStatsEvents();
+    const campaignId = new URLSearchParams(window.location.search).get("campaignId");
+    state.highlightedCampaignId = campaignId;
+    await loadCampaignStats(campaignId);
+    setStatus(campaignId ? "Campaign stats loaded for the selected campaign." : "Campaign stats loaded.");
+    return;
+  }
   fillTemplates();
   fillLists();
-  bindEvents();
+  bindLaunchEvents();
   setStatus("Ready. Confirm the database and VPS API above before continuing.");
 }
 
-function bindEvents() {
+function bindLaunchEvents() {
   document.querySelector("#details-form").addEventListener("submit", handleDetails);
   document.querySelector("#template-slug").addEventListener("change", updateTemplateSubject);
   document.querySelector("#csv-form").addEventListener("submit", handleCsvPreview);
@@ -30,6 +39,10 @@ function bindEvents() {
   document.querySelector("#enqueue-form").addEventListener("submit", handleEnqueue);
   document.querySelectorAll("[data-back]").forEach((button) => button.addEventListener("click", () => showStep(button.dataset.back)));
   document.addEventListener("invalid", () => showError("Complete the required fields before continuing."), true);
+}
+
+function bindStatsEvents() {
+  document.querySelector("#refresh-stats").addEventListener("click", handleRefreshStats);
 }
 
 function handleDetails(event) {
@@ -120,11 +133,26 @@ async function handleEnqueue(event) {
     final.replaceChildren(
       heading("Queue jobs created"),
       paragraph(`${result.queued} new jobs queued. The VPS worker owns delivery.`),
-      paragraph(`Excluded: ${result.excluded.unsubscribed} unsubscribed, ${result.excluded.suppressed} suppressed, ${result.excluded.existingJobs} existing jobs.`)
+      paragraph(`Excluded: ${result.excluded.unsubscribed} unsubscribed, ${result.excluded.suppressed} suppressed, ${result.excluded.existingJobs} existing jobs.`),
+      actionLink("View campaign stats", `/stats?campaignId=${encodeURIComponent(state.campaignId)}`)
     );
     final.hidden = false;
     setStatus("Campaign enqueue completed. Delivery remains on the VPS worker.");
   });
+}
+
+async function handleRefreshStats(event) {
+  await withSubmission(event.currentTarget, async () => {
+    await loadCampaignStats();
+    setStatus("Campaign stats refreshed.");
+  });
+}
+
+async function loadCampaignStats(campaignId) {
+  const result = campaignId
+    ? await api(`/api/campaigns/${campaignId}/stats`)
+    : await api("/api/campaigns/stats");
+  renderCampaignStats(campaignId ? [result.campaign] : result.campaigns);
 }
 
 async function api(path, body) {
@@ -215,6 +243,61 @@ function renderMetrics(selector, values) {
   }));
 }
 
+function renderCampaignStats(campaigns) {
+  const body = document.querySelector("#campaign-stats-body");
+  if (!campaigns.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 9;
+    cell.textContent = "No campaigns found.";
+    row.append(cell);
+    body.replaceChildren(row);
+    return;
+  }
+
+  body.replaceChildren(...campaigns.map((campaign) => {
+    const row = document.createElement("tr");
+    if (campaign.campaignId === state.highlightedCampaignId) row.className = "highlight-row";
+
+    row.append(
+      campaignCell(campaign),
+      numberCell(campaign.jobs.queued),
+      numberCell(campaign.jobs.pending + campaign.jobs.leased + campaign.jobs.retrying),
+      numberCell(campaign.jobs.sent),
+      numberCell(campaign.jobs.failed + campaign.jobs.suppressed),
+      numberCell(campaign.events.delivery),
+      textCell(`${campaign.events.uniqueOpens}/${campaign.events.open}`),
+      textCell(`${campaign.events.uniqueClicks}/${campaign.events.click}`),
+      textCell(formatDate(campaign.updatedAt))
+    );
+    return row;
+  }));
+}
+
+function campaignCell(campaign) {
+  const cell = document.createElement("th");
+  cell.scope = "row";
+  const name = document.createElement("strong");
+  name.textContent = campaign.name || campaign.campaignId;
+  const meta = document.createElement("span");
+  meta.className = "cell-meta";
+  meta.textContent = `${campaign.templateSlug || "unknown template"}\n${campaign.subject || "default subject"}`;
+  cell.append(name, meta);
+  return cell;
+}
+
+function textCell(value) {
+  const cell = document.createElement("td");
+  cell.textContent = value;
+  return cell;
+}
+
+function numberCell(value) {
+  const cell = textCell(String(value));
+  cell.className = "number-cell";
+  return cell;
+}
+
 function showError(error) {
   errorSummary.textContent = error instanceof Error ? error.message : String(error);
   errorSummary.hidden = false;
@@ -226,3 +309,17 @@ function text(selector, value) { document.querySelector(selector).textContent = 
 function humanize(value) { return value.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase()); }
 function heading(value) { const element = document.createElement("h3"); element.textContent = value; return element; }
 function paragraph(value) { const element = document.createElement("p"); element.textContent = value; return element; }
+function actionLink(label, href) {
+  const link = document.createElement("a");
+  link.className = "button-link secondary";
+  link.href = href;
+  link.textContent = label;
+  return link;
+}
+function formatDate(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(new Date(value));
+}

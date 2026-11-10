@@ -67,6 +67,59 @@ Enqueues one `email_jobs` document per eligible active subscriber and returns ac
 
 Returns active member, unsubscribed, suppressed, existing-job, and currently eligible counts without creating jobs.
 
+### Local Campaign Stats
+
+The loopback-only local admin server exposes read-only campaign stats routes. These routes are not mounted by the production API server and do not require the VPS API admin token in the browser.
+
+`GET /api/campaigns/stats?limit=25`
+
+Returns recent campaigns with normalized delivery and engagement counts. `limit` is optional and bounded from 1 to 100.
+
+`GET /api/campaigns/:campaignId/stats`
+
+Returns stats for one campaign. Invalid or unknown ids return a 4xx response.
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "campaigns": [
+    {
+      "campaignId": "6a4ca08857540d7f5b572878",
+      "name": "AgulhadaParaDayTraders",
+      "templateSlug": "agulhada-para-day-traders",
+      "subject": "Grafico de 5 minutos liberado no Plano VIP",
+      "status": "queued",
+      "createdAt": "2026-07-07T06:45:28.537Z",
+      "updatedAt": "2026-07-07T06:49:43.563Z",
+      "jobs": {
+        "queued": 100,
+        "pending": 0,
+        "leased": 0,
+        "sent": 100,
+        "retrying": 0,
+        "failed": 0,
+        "suppressed": 0
+      },
+      "events": {
+        "delivery": 97,
+        "bounce": 0,
+        "complaint": 0,
+        "open": 10,
+        "uniqueOpens": 9,
+        "click": 5,
+        "uniqueClicks": 1
+      }
+    }
+  ]
+}
+```
+
+`jobs.queued` is the number of campaign jobs. The individual job status counts come from `email_jobs.status`.
+
+`events.open` and `events.click` are total SES event counts. `events.uniqueOpens` and `events.uniqueClicks` deduplicate by `subscriberId` when available, otherwise by email address.
+
 `POST /api/campaigns/:campaignId/pause`
 
 Pauses sending. Existing leased jobs may finish.

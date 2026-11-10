@@ -9,4 +9,7 @@ test("local admin server is loopback-only and does not import sending or worker 
   assert.match(server, /listen\(config\.LOCAL_ADMIN_PORT, "127\.0\.0\.1"/);
   assert.doesNotMatch(`${server}\n${routes}`, /from ["']\.\.\/(mailer|queue|worker)\.js["']/);
   assert.match(routes, /\/api\/manual\/send/);
+  assert.match(routes, /\/api\/campaigns\/stats/);
+  assert.match(routes, /listCampaignStats/);
+  assert.doesNotMatch(routes, /payload:|sesMessageId/);
 });
